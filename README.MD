@@ -177,7 +177,7 @@ On va détailler le code, en mettant évidence les points communs et les différ
 **Changements**
 
 Les changements se situent à trois endroits :
-* En premier lieu, la prop `path` passée à `Route` pour afficher le profil, contient désormais deux "segments" ; un qui est fixe : `profile`, et un variable : `:name`. Les chemins suivants correspondent à ce `path` : `/profile/Homer`, `/profile/Marge`, `/profile/Lisa`, etc. On ne sait simplement pas à l'avance ce qui se trouvera derrière `/profile/`, on spécifie donc qu'on s'attend à trouver "quelque chose" à cet endroit, et qu'on veut le stocker dans un "paramètre" `name`.
+* En premier lieu, la prop `path` passée à `Route` pour afficher le profil, contient désormais deux "segments" ; un qui est fixe : `profile`, et un variable : `:name`. Les chemins suivants correspondent à ce `path` : `/profile/Homer`, `/profile/Marge`, `/profile/Lisa`, etc. On ne sait pas à l'avance ce qui se trouvera derrière `/profile/`, on spécifie juste qu'on s'attend à trouver un paramètre à cet endroit : c'est pourquoi on indique un nom de paramètre, ici `name`, précédé de `:`. On peut trouver plusieurs paramètres dans un même `path`.
 * Il y a deux `Link` pointant vers les profils d'Homer et Marge. Ces liens vont tous les deux correspondre à la route `/profile/:name`.
 * Dans le composant `Profile`, on récupère la valeur du "paramètre" `name`. Ce n'est pas à proprement parler une variable : on le récupère via une des props : `props.match.params.name`. Alors, rien que cette ligne donne mal à la tête, on va donc détailler ça un peu plus !
 
@@ -189,3 +189,308 @@ Le composant placé sous une `Route` de React Router reçoit d'office trois `pro
 * `history`
 
 `match` est un objet contenant des informations sur la route active. Il contient notamment un attribut `params` qui est lui-même un objet, contenant les valeurs récupérées pour les segments d'URL variables. Par exemple, `props.match.params` vaut `{ name: "Homer" }` si on visite le profil d'Homer, et  `{ name: "Marge" }` si on visite celui de Marge.
+
+On pourrait avoir un `path` plus complexe. Par exemple, voici deux URL d'articles du journal Le Monde :
+* https://www.lemonde.fr/pixels/article/2018/06/04/microsoft-acquiert-pour-7-5-milliards-de-dollars-la-plateforme-de-developpement-de-logiciels-github_5309439_4408996.html
+* https://www.lemonde.fr/sciences/article/2019/04/04/une-baleine-prehistorique-a-quatre-pattes-proche-de-la-loutre-decouverte-au-perou_5445927_1650684.html
+
+Ces deux URL ont une forme similaire :
+* l'URL racine du site (https://lemonde.fr),
+* suivie de la catégorie (`pixels` ou `sciences` ici),
+* suivie du mot-clé `article` (a priori fixe),
+* suivi des année, mois, jour,
+* suivis d'une longue chaîne contenant :
+    * le titre converti en caractères URL-compatibles : en minuscules, caractères accentués convertis en caractères non-accentués, espaces et caractères spéciaux convertis en `-` voire supprimés - ce qu'on appelle couramment un *slug*,
+    * deux numéros, formant probablement un identifiant unique pour l'article dans une base de données
+
+Si on devait écrire une version React de ce journal, on aurait probablement une "route" qui ressemblerait à ceci :
+
+```jsx
+<Route path="/:category/article/:year/:month/:day/:slugAndId" component={Article} />
+```
+
+Dans le composant `Article`, on pourrait accéder aux paramètres de l'URL via `props.match.params` (si c'est une fonction) ou via `this.props.match.params` (si c'est une classe).
+
+Pour le premier article, cet objet serait le suivant :
+
+```javascript
+{
+  category: 'pixels',
+  year: '2018',
+  month: '06',
+  day: '04',
+  slugAndId: 'une-baleine-prehistorique-a-quatre-pattes-proche-de-la-loutre-decouverte-au-perou_5445927_1650684.html'
+}
+```
+
+## Exemple 3 - utilisation des paramètres du path pour appeler une API
+
+Le plus souvent, les segments variables du `path` (précédés d'un `:`) vont être utilisés pour faire un appel paramétré à une API.
+
+Pour donner un peu de contexte à notre exemple, on va écrire une application qui permet :
+1. de lister des profils GitHub (page d'accueil, composant `ProfileList`),
+2. d'avoir des détails sur un profil particulier (composant `SingleProfile`).
+
+### Données renvoyées par l'API
+
+Voici à quoi ressemblent les données qu'on obtient en appelant l'URL https://api.github.com/users qui renvoie des utilisateurs (on a coupé le tableau pour n'en afficher que 2 sur les 30 obtenus) :
+
+```json
+[
+  {
+    "login": "mojombo",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "avatar_url": "https://avatars0.githubusercontent.com/u/1?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/mojombo",
+    "html_url": "https://github.com/mojombo",
+    "followers_url": "https://api.github.com/users/mojombo/followers",
+    "following_url": "https://api.github.com/users/mojombo/following{/other_user}",
+    "gists_url": "https://api.github.com/users/mojombo/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/mojombo/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/mojombo/subscriptions",
+    "organizations_url": "https://api.github.com/users/mojombo/orgs",
+    "repos_url": "https://api.github.com/users/mojombo/repos",
+    "events_url": "https://api.github.com/users/mojombo/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/mojombo/received_events",
+    "type": "User",
+    "site_admin": false
+  },
+  {
+    "login": "defunkt",
+    "id": 2,
+    "node_id": "MDQ6VXNlcjI=",
+    "avatar_url": "https://avatars0.githubusercontent.com/u/2?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/defunkt",
+    "html_url": "https://github.com/defunkt",
+    "followers_url": "https://api.github.com/users/defunkt/followers",
+    "following_url": "https://api.github.com/users/defunkt/following{/other_user}",
+    "gists_url": "https://api.github.com/users/defunkt/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/defunkt/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/defunkt/subscriptions",
+    "organizations_url": "https://api.github.com/users/defunkt/orgs",
+    "repos_url": "https://api.github.com/users/defunkt/repos",
+    "events_url": "https://api.github.com/users/defunkt/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/defunkt/received_events",
+    "type": "User",
+    "site_admin": false
+  }
+]
+```
+
+Voici maintenant ce que renvoie l'API GitHub si on interroge les détails d'un utilisateur particulier - pour ce faire, on concatène son login à l'URL précédente, ce qui nous donne par exemple https://api.github.com/users/defunkt :
+
+```json
+{
+  "login": "defunkt",
+  "id": 2,
+  "node_id": "MDQ6VXNlcjI=",
+  "avatar_url": "https://avatars0.githubusercontent.com/u/2?v=4",
+  "gravatar_id": "",
+  "url": "https://api.github.com/users/defunkt",
+  "html_url": "https://github.com/defunkt",
+  "followers_url": "https://api.github.com/users/defunkt/followers",
+  "following_url": "https://api.github.com/users/defunkt/following{/other_user}",
+  "gists_url": "https://api.github.com/users/defunkt/gists{/gist_id}",
+  "starred_url": "https://api.github.com/users/defunkt/starred{/owner}{/repo}",
+  "subscriptions_url": "https://api.github.com/users/defunkt/subscriptions",
+  "organizations_url": "https://api.github.com/users/defunkt/orgs",
+  "repos_url": "https://api.github.com/users/defunkt/repos",
+  "events_url": "https://api.github.com/users/defunkt/events{/privacy}",
+  "received_events_url": "https://api.github.com/users/defunkt/received_events",
+  "type": "User",
+  "site_admin": false,
+  "name": "Chris Wanstrath",
+  "company": null,
+  "blog": "http://chriswanstrath.com/",
+  "location": null,
+  "email": null,
+  "hireable": null,
+  "bio": "🍔",
+  "public_repos": 107,
+  "public_gists": 273,
+  "followers": 20695,
+  "following": 210,
+  "created_at": "2007-10-20T05:24:19Z",
+"updated_at": "2019-02-15T18:05:47Z"
+}
+```
+
+Il est important de comprendre :
+- Qu'un appel permettant d'obtenir plusieurs éléments d'un certain type nous renvoie un *tableau d'objets*.
+- Qu'un appel permettant d'obtenir les détails d'un seul élément nous renvoie un *objet* (souvent avec plus d'informations)
+
+### Composant `App`
+
+Voici comment on pourrait écrire notre application, en commençant par le composant `App`, dans lequel on va définir les routes :
+
+```jsx
+// App.js
+import React from 'react';
+import { Link, Route } from 'react-router-dom';
+import ProfileList from './ProfileList';
+import SingleProfile from './SingleProfile';
+import './App.css';
+
+const App = () => (
+  <div className="App">
+    <nav>
+      <Link to="/">Home</Link>
+    </nav>
+    
+    <Route path="/" exact component={ProfileList} />
+    <Route path="/profile/:login" exact component={SingleProfile} />
+  </div>
+);
+
+export default App;
+```
+
+La `Route` permettant d'accéder aux détails d'un utilisateur a pour path `/profile/:login`, on devra donc utiliser des liens comme `/profile/gaearon` ou `/profile/torvalds`.
+
+### Composant `ProfileList`
+
+Voici le composant `ProfileList`, qui va afficher une liste de profils :
+
+```jsx
+// ProfileList.js
+import React, { Component } from 'react';
+import { Link } from 'react-router-dom';
+
+class ProfileList extends Component {
+  constructor(props) {
+    super(props);
+    // Initialize an empty array in the state,
+    // to store users fetched from the API
+    this.state = {
+      users: []
+    };
+  }
+
+  // This is a lifecycle method. It's part of the
+  // methods provided by class React.Component
+  // It is run right after the FIRST render only,
+  // and is the best place to send API calls from.
+  componentDidMount() {
+    fetch('https://api.github.com/users')
+      .then(res => res.json())
+      .then(usersList => this.setState({
+        users: usersList
+      }));
+  }
+
+  render() {
+    return (
+      <div className="ProfileList">
+        {
+          this.state.users.map(user => (
+            <section>
+              <h3>{user.login}</h3>
+              <img src={user.avatar_url} alt={user.login} />
+              <Link to={`/profile/${user.login}`}>View {user.login}'s details</Link>
+            </section>
+          ))
+        } 
+      </div>
+    );
+  }
+}
+
+export default ProfileList;
+```
+
+Dans le constructeur, on initialise un tableau d'`users` vide. De cette façon, on est sûr que `this.state.users.map` fonctionnera dans le `render` (sinon, on pourrait avoir des erreurs !).
+
+Des précisions s'imposent, si tu vois `componentDidMount()` pour la première fois (c'est l'objet d'une quête dédiée). Son nom précise son utilité : il s'agit d'une méthode héritée de `React.Component`, appelée juste une fois, après le premier rendu d'un composant. (*component did mount* signifie "le composant vient d'être inséré).
+
+C'est l'endroit habituel d'où on peut effectuer des appels API, lorsqu'on veut que ceux-ci soient lancés de façon automatique.
+
+Dans le `render`, on crée un lien en utilisant le `Link` du routeur, pour chacun des utilisateurs. Son attribut `to` est construit en concaténant `/profile` et l'identifiant d'un utilisateur (`/profile/mojombo`, `/profile/defunkt`).
+
+### Composant `SingleProfile`
+
+Ce composant va beaucoup ressembler à `ProfileList`. C'est ici (précisément dans `componentDidMount`) qu'on va récupérer le paramètre `login` défini dans la deuxième route de `App`. Il nous permet d'appeler l'API GitHub, en insérant ce paramètre dans l'URL qu'on appelle. 
+
+```jsx
+// SingleProfile.js
+import React, { Component } from 'react';
+
+class SingleProfile extends Component {
+  constructor(props) {
+    super(props);
+    // Initialize a user key as `null`
+    // This is a way to tell that we are expecting an object,
+    // but we don't have its value yet
+    this.state = {
+      user: null
+    };
+  }
+
+  // This is where we access the login parameter,
+  // from the this.props.match.params object
+  // We append its value to the base URL, in order
+  // to call the appropriate URL on the GitHub API
+  componentDidMount() {
+    const userLogin = this.props.match.params.login;
+    const url = `https://api.github.com/users/${userLogin}`;
+    fetch(url)
+      .then(res => res.json())
+      .then(userData => this.setState({
+        user: userData
+      }));
+  }
+
+  render() {
+    // In the render, we have to be careful not to try and
+    // use attributes from this.state.user before the API calls
+    // return and sets its value. This is why we use conditional
+    // rendering with &&
+    const user = this.state.user;
+    return (
+      <div className="SingleProfile">
+        {
+          user && (
+            <section>
+              <img src={user.avatar_url} alt={user.login} />
+              <div>
+                <h3>{user.login}</h3>
+                <p>Real name: {user.name}</p>
+                <p>Blog:
+                  <a target="_blank" href={user.blog}>
+                    {user.blog}
+                  </a>
+                </p>
+                <p>Location: {user.location}</p>
+              </div>
+            </section>
+          )
+        } 
+      </div>
+    );
+  }
+}
+
+export default SingleProfile;
+```
+
+Voici enfin à quoi ressemblerait `index.js` (rien de nouveau par rapport aux exemples précédents) :
+
+```jsx
+// index.js
+import React from "react";
+import ReactDOM from "react-dom";
+import { BrowserRouter } from "react-router-dom";
+import App from './App';
+
+const rootElement = document.getElementById("root");
+ReactDOM.render(
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>,
+  rootElement
+);
+```
+
+La démo fonctionnelle est accessible sur ce [CodeSandbox](https://codesandbox.io/s/xpxmq2pw5z).
