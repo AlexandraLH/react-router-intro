@@ -58,6 +58,8 @@ On aura (note l'emploi de l'attribut `to` au lieu de `href`) :
 
     <Link to="/link/to/somewhere">Somewhere</Link>
 
+> L'utilisation de `Link` au lieu d'un lien "classique" est **indispensable**. C'est en effet le `Link` qui permet de modifier le comportement par défaut du lien, de façon à ne *pas sortir de la page*.
+
 Ensuite, `Route` permet de définir... une route ! C'est à dire l'association entre un chemin/URL (`/`, `/profile`, `/contact-us`) et un composant.
 
 `Route` reçoit au moins deux props :
